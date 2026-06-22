@@ -1,0 +1,28 @@
+{
+  "name": "slack-file-preview-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Workers + Workflows Slack app that previews Markdown and HTML files shared in Slack.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tdd:check": "bash scripts/ci/check_tdd_bdd_profile.sh",
+    "db:migrate:local": "wrangler d1 migrations apply slack-file-preview --local",
+    "db:migrate:remote": "wrangler d1 migrations apply slack-file-preview --remote",
+    "db:list": "wrangler d1 migrations list slack-file-preview"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260621.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.9",
+    "wrangler": "4.103.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

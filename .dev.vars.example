@@ -1,0 +1,8 @@
+SLACK_SIGNING_SECRET=replace-with-your-slack-signing-secret
+SLACK_CLIENT_ID=111111111111.222222222222
+SLACK_CLIENT_SECRET=replace-with-your-slack-client-secret
+SLACK_OAUTH_REDIRECT_URL=https://your-worker-domain.example.com/slack/oauth/callback
+INSTALLATION_TOKEN_ENCRYPTION_KEY=replace-with-long-random-secret-for-installation-tokens
+PREVIEW_SIGNING_SECRET=replace-with-long-random-secret-at-least-32-bytes
+# Optional legacy fallback for a single manually installed workspace.
+SLACK_BOT_TOKEN=xoxb-not-this-value-use-your-real-bot-token

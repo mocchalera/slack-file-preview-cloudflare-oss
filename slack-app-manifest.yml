@@ -1,0 +1,28 @@
+display_information:
+  name: File Previewer
+  description: Preview Markdown and HTML files shared in Slack.
+  background_color: "#2f3136"
+features:
+  bot_user:
+    display_name: file-preview
+    always_online: false
+oauth_config:
+  redirect_urls:
+    - https://YOUR_WORKER_DOMAIN/slack/oauth/callback
+  scopes:
+    bot:
+      - files:read
+      - chat:write
+settings:
+  event_subscriptions:
+    request_url: https://YOUR_WORKER_DOMAIN/slack/events
+    bot_events:
+      - file_shared
+      - file_deleted
+      - file_unshared
+      - app_uninstalled
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

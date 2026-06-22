@@ -1,0 +1,15 @@
+name: tdd-bdd-health
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tdd-bdd-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate TDD/BDD profile
+        run: bash scripts/ci/check_tdd_bdd_profile.sh

@@ -1,0 +1,12 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
+.Codex/settings.local.json
+dist/
+coverage/
+.DS_Store
+*.log
+*.bak.*

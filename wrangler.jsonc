@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "slack-file-preview",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+
+  "observability": {
+    "enabled": true
+  },
+
+  "vars": {
+    "PREVIEW_BASE_URL": "https://YOUR_WORKER_SUBDOMAIN.YOUR_ACCOUNT.workers.dev",
+    "MAX_FILE_BYTES": "5242880",
+    "PREVIEW_TTL_SECONDS": "604800",
+    "MAX_SLACK_BLOCK_EXCERPT_CHARS": "1200"
+  },
+
+  "secrets": {
+    "required": [
+      "SLACK_SIGNING_SECRET",
+      "PREVIEW_SIGNING_SECRET"
+    ]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slack-file-preview",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "PREVIEWS",
+      "bucket_name": "slack-file-previews"
+    }
+  ],
+
+  "workflows": [
+    {
+      "name": "slack-file-preview-workflow",
+      "binding": "PREVIEW_WORKFLOW",
+      "class_name": "ProcessSlackFileWorkflow"
+    }
+  ],
+
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
+
+  // Optional Phase 2:
+  // Browser rendering can be added once Markdown preview is stable.
+  // "browser": { "binding": "BROWSER" }
+}
