@@ -8,6 +8,12 @@ Slackに共有されたMarkdown / HTMLファイルを検知し、スレッドに
 
 Slackで`.md`や`.html`が共有されたとき、毎回ダウンロードしないと中身を確認できない摩擦をなくします。
 
+## 使用イメージ
+
+SlackにMarkdownファイルを投稿すると、スレッドに全文プレビューを開くボタンと文書の基本情報・見出しが返ります。
+
+![SlackでMarkdownファイルを共有したときのFile Previewer投稿例](assets/slack-preview-usage.png)
+
 ```text
 Slack file_shared event
   ↓
@@ -37,11 +43,11 @@ Slackスレッドにプレビュー投稿
 
 | 種別 | 挙動 |
 |---|---|
-| `.md`, `.markdown` | 見出し・冒頭・リンクをSlackスレッドへ投稿し、R2上の安全な全文HTMLをWorker経由で表示 |
+| `.md`, `.markdown` | 全文を開くボタン・種別・サイズ・見出しをSlackスレッドへ投稿し、R2上の安全な全文HTMLをWorker経由で表示 |
 | `.html`, `.htm` | 生HTMLをそのまま配信せず、テキスト抽出した安全プレビューを生成 |
 | その他 | 無視 |
 | 大きすぎるファイル | スキップして必要ならスレッドに通知 |
-| 削除 / unshare | D1上のプレビューをrevokedに変更 |
+| 削除 / unshare | D1上のプレビューをrevokedに変更し、記録済みのbot投稿を削除 |
 | app uninstall | D1上のworkspace installationをrevokedに変更 |
 
 ## セットアップ
