@@ -7,15 +7,11 @@ export function buildPreviewBlocks(args: {
   previewUrl: string;
   maxExcerptChars: number;
 }): unknown[] {
-  const { rendered, file, previewUrl, maxExcerptChars } = args;
+  const { rendered, previewUrl } = args;
   const icon = rendered.fileType === "markdown" ? "📄" : "🌐";
   const headings = rendered.headings.length
     ? rendered.headings.slice(0, 10).map((h, i) => `${i + 1}. ${slackEscape(h)}`).join("\n")
     : "見出しは検出されませんでした。";
-
-  const links = rendered.links.length
-    ? rendered.links.slice(0, 8).map((link) => `• ${slackEscape(link)}`).join("\n")
-    : null;
 
   const blocks: unknown[] = [
     {
@@ -25,6 +21,18 @@ export function buildPreviewBlocks(args: {
         text: `${icon} Preview: ${truncate(rendered.fileName, 80)}`,
         emoji: true
       }
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: { type: "plain_text", text: "全文を開く", emoji: true },
+          style: "primary",
+          url: previewUrl,
+          action_id: "open_preview"
+        }
+      ]
     },
     {
       type: "section",
@@ -39,48 +47,11 @@ export function buildPreviewBlocks(args: {
         type: "mrkdwn",
         text: `*見出し*\n${headings}`
       }
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*冒頭プレビュー*\n>${slackEscape(truncate(rendered.excerpt, maxExcerptChars)).replace(/\n/g, "\n>")}`
-      }
     }
   ];
-
-  if (links) {
-    blocks.push({
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*リンク*\n${links}`
-      }
-    });
-  }
-
-  const elements: unknown[] = [
-    {
-      type: "button",
-      text: { type: "plain_text", text: "全文を開く", emoji: true },
-      url: previewUrl,
-      action_id: "open_preview"
-    }
-  ];
-
-  if (file.permalink) {
-    elements.push({
-      type: "button",
-      text: { type: "plain_text", text: "元ファイル", emoji: true },
-      url: file.permalink,
-      action_id: "open_slack_file"
-    });
-  }
-
-  blocks.push({ type: "actions", elements });
 
   if (rendered.fileType === "html") {
-    blocks.splice(2, 0, {
+    blocks.splice(3, 0, {
       type: "context",
       elements: [
         {
