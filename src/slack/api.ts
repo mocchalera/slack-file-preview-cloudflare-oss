@@ -1,4 +1,4 @@
-import type { SlackFileInfoResponse } from "../types";
+import type { SlackFileInfoResponse, SlackPostMessageResponse } from "../types";
 
 export class SlackApiError extends Error {
   constructor(public readonly method: string, public readonly slackError: string) {
@@ -51,7 +51,7 @@ export class SlackApiClient {
     threadTs?: string | null;
     text: string;
     blocks: unknown[];
-  }): Promise<void> {
+  }): Promise<SlackPostMessageResponse> {
     const body: Record<string, unknown> = {
       channel: input.channel,
       text: input.text,
@@ -73,9 +73,29 @@ export class SlackApiClient {
       body: JSON.stringify(body)
     });
 
-    const data = (await res.json()) as { ok: boolean; error?: string };
+    const data = (await res.json()) as SlackPostMessageResponse;
     if (!data.ok) {
       throw new SlackApiError("chat.postMessage", data.error ?? `http_${res.status}`);
+    }
+    return data;
+  }
+
+  async deleteMessage(input: { channel: string; ts: string }): Promise<void> {
+    const res = await fetch("https://slack.com/api/chat.delete", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.botToken}`,
+        "Content-Type": "application/json; charset=utf-8"
+      },
+      body: JSON.stringify({
+        channel: input.channel,
+        ts: input.ts
+      })
+    });
+
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    if (!data.ok) {
+      throw new SlackApiError("chat.delete", data.error ?? `http_${res.status}`);
     }
   }
 }

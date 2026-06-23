@@ -3,14 +3,32 @@ import type { Env } from "../src/types";
 
 const mocks = vi.hoisted(() => ({
   insertSlackEventOnce: vi.fn(),
+  listActivePreviewSlackMessagesByFileId: vi.fn(),
+  markPreviewSlackMessageDeleted: vi.fn(),
   markPreviewsRevokedByFileId: vi.fn(),
-  revokeSlackInstallation: vi.fn()
+  revokeSlackInstallation: vi.fn(),
+  resolveSlackBotToken: vi.fn(),
+  deleteMessage: vi.fn()
 }));
 
 vi.mock("../src/db/queries", () => ({
   insertSlackEventOnce: mocks.insertSlackEventOnce,
+  listActivePreviewSlackMessagesByFileId: mocks.listActivePreviewSlackMessagesByFileId,
+  markPreviewSlackMessageDeleted: mocks.markPreviewSlackMessageDeleted,
   markPreviewsRevokedByFileId: mocks.markPreviewsRevokedByFileId,
   revokeSlackInstallation: mocks.revokeSlackInstallation
+}));
+
+vi.mock("../src/slack/installations", () => ({
+  resolveSlackBotToken: mocks.resolveSlackBotToken
+}));
+
+vi.mock("../src/slack/api", () => ({
+  SlackApiClient: vi.fn(function SlackApiClient() {
+    return {
+      deleteMessage: mocks.deleteMessage
+    };
+  })
 }));
 
 const { routeSlackEvents } = await import("../src/routes/slackEvents");
@@ -21,23 +39,101 @@ describe("routeSlackEvents revocation events", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.insertSlackEventOnce.mockResolvedValue(true);
+    mocks.listActivePreviewSlackMessagesByFileId.mockResolvedValue([]);
+    mocks.markPreviewSlackMessageDeleted.mockResolvedValue(undefined);
     mocks.markPreviewsRevokedByFileId.mockResolvedValue(undefined);
     mocks.revokeSlackInstallation.mockResolvedValue(undefined);
+    mocks.resolveSlackBotToken.mockResolvedValue("xoxb-test");
+    mocks.deleteMessage.mockResolvedValue(undefined);
   });
 
   it("revokes previews for file_deleted with file_id", async () => {
     const env = createEnv();
+    const ctx = createExecutionContext();
     const response = await routeSlackEvents(
       await signedSlackRequest({
         event_id: "Ev_deleted_file_id",
         event: { type: "file_deleted", file_id: "F_DELETED", event_ts: "1361482916.000004" }
       }),
       env,
-      createExecutionContext()
+      ctx
     );
 
     await expect(response.json()).resolves.toEqual({ ok: true, revoked: true });
+    expect(mocks.listActivePreviewSlackMessagesByFileId).toHaveBeenCalledWith(env.DB, "T123", "F_DELETED");
     expect(mocks.markPreviewsRevokedByFileId).toHaveBeenCalledWith(env.DB, "T123", "F_DELETED");
+    expect(ctx.waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("deletes the app preview message when a shared file is deleted", async () => {
+    mocks.listActivePreviewSlackMessagesByFileId.mockResolvedValue([
+      {
+        previewId: "prv_deleted",
+        channelId: "C123",
+        messageTs: "1710000000.000200"
+      }
+    ]);
+    const env = createEnv();
+    const ctx = createExecutionContext();
+
+    const response = await routeSlackEvents(
+      await signedSlackRequest({
+        event_id: "Ev_deleted_with_preview_message",
+        event: { type: "file_deleted", file_id: "F_DELETED_WITH_MESSAGE" }
+      }),
+      env,
+      ctx
+    );
+
+    await expect(response.json()).resolves.toEqual({ ok: true, revoked: true });
+    expect(mocks.markPreviewsRevokedByFileId).toHaveBeenCalledWith(env.DB, "T123", "F_DELETED_WITH_MESSAGE");
+    expect(ctx.waitUntil).toHaveBeenCalledOnce();
+
+    const deletion = ctx.waitUntil.mock.calls[0]?.[0] as Promise<void>;
+    await deletion;
+
+    expect(mocks.resolveSlackBotToken).toHaveBeenCalledWith(env, "T123");
+    expect(mocks.deleteMessage).toHaveBeenCalledWith({
+      channel: "C123",
+      ts: "1710000000.000200"
+    });
+    expect(mocks.markPreviewSlackMessageDeleted).toHaveBeenCalledWith(env.DB, "prv_deleted", expect.any(Number));
+  });
+
+  it("keeps preview revocation successful when Slack message deletion fails", async () => {
+    mocks.listActivePreviewSlackMessagesByFileId.mockResolvedValue([
+      {
+        previewId: "prv_delete_failure",
+        channelId: "C123",
+        messageTs: "1710000000.000300"
+      }
+    ]);
+    mocks.deleteMessage.mockRejectedValue(new Error("Slack API chat.delete failed: message_not_found"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const env = createEnv();
+    const ctx = createExecutionContext();
+
+    const response = await routeSlackEvents(
+      await signedSlackRequest({
+        event_id: "Ev_deleted_with_delete_failure",
+        event: { type: "file_deleted", file_id: "F_DELETE_FAILURE" }
+      }),
+      env,
+      ctx
+    );
+
+    await expect(response.json()).resolves.toEqual({ ok: true, revoked: true });
+    expect(mocks.markPreviewsRevokedByFileId).toHaveBeenCalledWith(env.DB, "T123", "F_DELETE_FAILURE");
+
+    const deletion = ctx.waitUntil.mock.calls[0]?.[0] as Promise<void>;
+    await expect(deletion).resolves.toBeUndefined();
+    expect(mocks.markPreviewSlackMessageDeleted).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Failed to delete Slack preview message",
+      expect.objectContaining({ previewId: "prv_delete_failure" })
+    );
+
+    warnSpy.mockRestore();
   });
 
   it("revokes previews for file_deleted with file string fallback", async () => {
@@ -90,6 +186,7 @@ describe("routeSlackEvents revocation events", () => {
     );
 
     await expect(response.json()).resolves.toEqual({ ok: true, revoked: false });
+    expect(mocks.listActivePreviewSlackMessagesByFileId).not.toHaveBeenCalled();
     expect(mocks.markPreviewsRevokedByFileId).not.toHaveBeenCalled();
   });
 
@@ -106,6 +203,7 @@ describe("routeSlackEvents revocation events", () => {
     );
 
     await expect(response.json()).resolves.toEqual({ ok: true, duplicate: true });
+    expect(mocks.listActivePreviewSlackMessagesByFileId).not.toHaveBeenCalled();
     expect(mocks.markPreviewsRevokedByFileId).not.toHaveBeenCalled();
   });
 
@@ -143,12 +241,12 @@ function createEnv(): Env {
   };
 }
 
-function createExecutionContext(): ExecutionContext {
+function createExecutionContext(): ExecutionContext & { waitUntil: ReturnType<typeof vi.fn> } {
   return {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn(),
     props: {}
-  } as unknown as ExecutionContext;
+  } as unknown as ExecutionContext & { waitUntil: ReturnType<typeof vi.fn> };
 }
 
 async function signedSlackRequest(input: { event_id: string; event: unknown }): Promise<Request> {

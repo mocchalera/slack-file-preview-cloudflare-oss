@@ -1,5 +1,11 @@
 import type { PreviewRecord, SlackInstallationRecord } from "../types";
 
+export interface PreviewSlackMessage {
+  previewId: string;
+  channelId: string;
+  messageTs: string;
+}
+
 export async function insertSlackEventOnce(
   db: D1Database,
   input: {
@@ -97,6 +103,60 @@ export async function markPreviewsRevokedByFileId(db: D1Database, teamId: string
        WHERE team_id = ? AND file_id = ? AND status = 'active'`
     )
     .bind(now, teamId, fileId)
+    .run();
+}
+
+export async function recordPreviewSlackMessagePosted(
+  db: D1Database,
+  input: {
+    previewId: string;
+    channelId: string;
+    messageTs: string;
+    now: number;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE previews
+       SET slack_message_channel = ?, slack_message_ts = ?, slack_message_deleted_at = NULL, updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(input.channelId, input.messageTs, input.now, input.previewId)
+    .run();
+}
+
+export async function listActivePreviewSlackMessagesByFileId(
+  db: D1Database,
+  teamId: string,
+  fileId: string
+): Promise<PreviewSlackMessage[]> {
+  const result = await db
+    .prepare(
+      `SELECT id, slack_message_channel, slack_message_ts
+       FROM previews
+       WHERE team_id = ?
+         AND file_id = ?
+         AND status = 'active'
+         AND slack_message_channel IS NOT NULL
+         AND slack_message_ts IS NOT NULL`
+    )
+    .bind(teamId, fileId)
+    .all<Pick<PreviewRecord, "id" | "slack_message_channel" | "slack_message_ts">>();
+
+  return (result.results ?? []).flatMap((row) => {
+    if (!row.slack_message_channel || !row.slack_message_ts) return [];
+    return [{
+      previewId: row.id,
+      channelId: row.slack_message_channel,
+      messageTs: row.slack_message_ts
+    }];
+  });
+}
+
+export async function markPreviewSlackMessageDeleted(db: D1Database, previewId: string, now: number): Promise<void> {
+  await db
+    .prepare(`UPDATE previews SET slack_message_deleted_at = ?, updated_at = ? WHERE id = ?`)
+    .bind(now, now, previewId)
     .run();
 }
 

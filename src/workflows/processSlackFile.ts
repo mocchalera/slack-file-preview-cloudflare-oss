@@ -7,7 +7,7 @@ import { detectSupportedFileType, findShareTs, getFileDisplayName } from "../pre
 import { renderMarkdownPreview } from "../preview/renderMarkdown";
 import { renderHtmlTextPreview } from "../preview/renderHtml";
 import { createSignedPreviewUrl } from "../preview/signedUrl";
-import { upsertPreview } from "../db/queries";
+import { recordPreviewSlackMessagePosted, upsertPreview } from "../db/queries";
 import { resolveSlackBotToken } from "../slack/installations";
 import { sha256Hex } from "../utils/crypto";
 
@@ -119,19 +119,30 @@ export class ProcessSlackFileWorkflow extends WorkflowEntrypoint<Env, FileShared
       });
     });
 
-    await step.do(
+    const posted = await step.do(
       "post slack thread preview",
       { retries: { limit: 3, delay: "5 seconds", backoff: "linear" }, timeout: "30 seconds" },
       async () => {
-        await slack.postMessage({
+        return slack.postMessage({
           channel: params.channelId,
           threadTs,
           text: `Preview generated for ${fileName}: ${previewUrl}`,
           blocks: buildPreviewBlocks({ rendered, file, previewUrl, maxExcerptChars })
         });
-        return { posted: true };
       }
     );
+
+    if (posted.ts) {
+      await step.do("record slack preview message", async () => {
+        await recordPreviewSlackMessagePosted(env.DB, {
+          previewId,
+          channelId: posted.channel ?? params.channelId,
+          messageTs: posted.ts!,
+          now: Math.floor(Date.now() / 1000)
+        });
+        return { recorded: true, ts: posted.ts };
+      });
+    }
 
     return { ok: true, previewId, fileType, fileName };
   }

@@ -5,12 +5,21 @@ import type {
   SlackFileSharedEvent
 } from "../types";
 import { verifySlackSignature } from "../slack/verifySignature";
-import { insertSlackEventOnce, markPreviewsRevokedByFileId, revokeSlackInstallation } from "../db/queries";
+import {
+  insertSlackEventOnce,
+  listActivePreviewSlackMessagesByFileId,
+  markPreviewSlackMessageDeleted,
+  markPreviewsRevokedByFileId,
+  revokeSlackInstallation,
+  type PreviewSlackMessage
+} from "../db/queries";
+import { SlackApiClient } from "../slack/api";
+import { resolveSlackBotToken } from "../slack/installations";
 
 export async function routeSlackEvents(
   request: Request,
   env: Env,
-  _ctx: ExecutionContext
+  ctx: ExecutionContext
 ): Promise<Response> {
   const rawBody = await request.text();
   const verified = await verifySlackSignature(request, rawBody, env.SLACK_SIGNING_SECRET);
@@ -76,7 +85,11 @@ export async function routeSlackEvents(
     const fileEvent = payload.event as SlackFileDeletedEvent;
     const fileId = extractRevokedFileId(fileEvent);
     if (fileId) {
+      const previewMessages = await listActivePreviewSlackMessagesByFileId(env.DB, payload.team_id, fileId);
       await markPreviewsRevokedByFileId(env.DB, payload.team_id, fileId);
+      if (previewMessages.length > 0) {
+        ctx.waitUntil(deletePreviewSlackMessages(env, payload.team_id, previewMessages));
+      }
     }
     return Response.json({ ok: true, revoked: Boolean(fileId) });
   }
@@ -107,4 +120,35 @@ function extractRevokedFileId(event: SlackFileDeletedEvent): string | null {
   }
 
   return null;
+}
+
+async function deletePreviewSlackMessages(
+  env: Env,
+  teamId: string,
+  previewMessages: PreviewSlackMessage[]
+): Promise<void> {
+  try {
+    const botToken = await resolveSlackBotToken(env, teamId);
+    const slack = new SlackApiClient(botToken);
+
+    await Promise.all(previewMessages.map(async (previewMessage) => {
+      try {
+        await slack.deleteMessage({
+          channel: previewMessage.channelId,
+          ts: previewMessage.messageTs
+        });
+        await markPreviewSlackMessageDeleted(env.DB, previewMessage.previewId, Math.floor(Date.now() / 1000));
+      } catch (error) {
+        console.warn("Failed to delete Slack preview message", {
+          previewId: previewMessage.previewId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }));
+  } catch (error) {
+    console.warn("Failed to initialize Slack preview message deletion", {
+      teamId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }

@@ -76,6 +76,13 @@ export interface SlackFileInfoResponse {
   file?: SlackFile;
 }
 
+export interface SlackPostMessageResponse {
+  ok: boolean;
+  error?: string;
+  channel?: string;
+  ts?: string;
+}
+
 export interface SlackFile {
   id: string;
   created?: number;
@@ -130,6 +137,9 @@ export interface PreviewRecord {
   file_size: number;
   thread_ts: string | null;
   slack_permalink: string | null;
+  slack_message_channel: string | null;
+  slack_message_ts: string | null;
+  slack_message_deleted_at: number | null;
   r2_html_key: string | null;
   r2_screenshot_key: string | null;
   status: string;

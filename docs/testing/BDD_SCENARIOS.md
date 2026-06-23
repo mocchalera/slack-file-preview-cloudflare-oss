@@ -51,7 +51,9 @@
 - Given: an active preview exists for a Slack file
 - When: Slack sends `file_deleted` or `file_unshared`
 - Then: the matching preview record is marked revoked and `/p/:previewId` no longer returns the preview body
+- And: if the app has recorded the generated Slack reply `ts`, the app deletes that bot-authored reply with `chat.delete`
 - Error/edge path: missing file IDs are ignored without failing Slack event handling
+- Error/edge path: deletion failures do not prevent preview revocation
 
 ### Scenario: App uninstall revokes workspace installation
 - Given: a workspace has installed the app through OAuth
